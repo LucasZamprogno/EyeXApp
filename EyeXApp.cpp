@@ -3,14 +3,20 @@
 */
 
 #include "stdafx.h"
-#include <Windows.h>
+#include <iostream>
 #include <string>
-#include <sstream>
+#include <websocketpp/config/asio_no_tls.hpp>
+#include <websocketpp/server.hpp>
+#include <Windows.h>
 #include <stdio.h>
 #include <conio.h>
 #include <assert.h>
 #include <eyex/EyeX.h>
-#include <curl/curl.h>
+
+typedef websocketpp::server<websocketpp::config::asio> server;
+using websocketpp::lib::placeholders::_1;
+using websocketpp::lib::placeholders::_2;
+using websocketpp::lib::bind;
 
 #pragma comment (lib, "Tobii.EyeX.Client.lib")
 
@@ -19,9 +25,13 @@ static const TX_STRING InteractorId = "Interaction Monitor";
 
 // global variables
 static TX_HANDLE g_hGlobalInteractorSnapshot = TX_EMPTY_HANDLE;
+int lastX = 0;
+int lastY = 0;
 
-CURL *curl;
-CURLcode res;
+void on_message(server* s, websocketpp::connection_hdl hdl, server::message_ptr message) {
+	std::string msg = "{\"x\":" + std::to_string(lastX) + ",\"y\":" + std::to_string(lastY) + "}";
+	s->send(hdl, msg, websocketpp::frame::opcode::text);
+}
 
 /*
 * Initializes g_hGlobalInteractorSnapshot with an interactor that has the Gaze Point behavior.
@@ -42,21 +52,6 @@ BOOL InitializeGlobalInteractorSnapshot(TX_CONTEXTHANDLE hContext)
 	txReleaseObject(&hInteractor);
 
 	return success;
-}
-
-void libcurlPostToServer(int x, int y) {
-	std::string postData = "x=" + std::to_string(x) + "&y=" + std::to_string(y);
-	const char * c = postData.c_str();
-	//std::string postData;
-	//std::stringstream s;
-	//s << "x=" << x << "&y=" << y;
-	//postData = s.str();
-	printf("Gaze Data: (%d, %d)\n", x, y);
-	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, c);
-	res = curl_easy_perform(curl);
-	if (res != CURLE_OK)
-		fprintf(stderr, "curl_easy_perform() failed: %s\n",
-			curl_easy_strerror(res));
 }
 
 /*
@@ -118,7 +113,9 @@ void OnGazeDataEvent(TX_HANDLE hGazeDataBehavior)
 {
 	TX_GAZEPOINTDATAEVENTPARAMS eventParams;
 	if (txGetGazePointDataEventParams(hGazeDataBehavior, &eventParams) == TX_RESULT_OK) {
-		libcurlPostToServer(eventParams.X, eventParams.Y); // Causes warning, TX_REAL to int. Works for our purposes
+		lastX = (int)eventParams.X;
+		lastY = (int)eventParams.Y;
+		printf("Gaze Data: (%.1f, %.1f) timestamp %.0f ms\n", eventParams.X, eventParams.Y, eventParams.Timestamp);
 	}
 	else {
 		printf("Failed to interpret gaze data event packet.\n");
@@ -145,12 +142,6 @@ void TX_CALLCONVENTION HandleEvent(TX_CONSTHANDLE hAsyncData, TX_USERPARAM userP
 
 int main(int argc, char* argv[])
 {
-	curl_global_init(CURL_GLOBAL_ALL);
-	curl = curl_easy_init();
-	// Disable https verifications
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-	curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:4321/coordinate");
 
 	TX_CONTEXTHANDLE hContext = TX_EMPTY_HANDLE;
 	TX_TICKET hConnectionStateChangedTicket = TX_INVALID_TICKET;
@@ -173,6 +164,18 @@ int main(int argc, char* argv[])
 	else {
 		printf("Initialization failed.\n");
 	}
+
+	// Setup websocket server
+	server coord_server;
+
+	coord_server.set_message_handler(bind(&on_message, &coord_server, ::_1, ::_2));
+
+	coord_server.init_asio();
+	coord_server.listen(2366);
+	coord_server.start_accept();
+
+	coord_server.run();
+
 	printf("Press any key to exit...\n");
 	_getch();
 	printf("Exiting.\n");
@@ -186,7 +189,5 @@ int main(int argc, char* argv[])
 	if (!success) {
 		printf("EyeX could not be shut down cleanly. Did you remember to release all handles?\n");
 	}
-	curl_easy_cleanup(curl);
-	curl_global_cleanup();
 	return 0;
 }
