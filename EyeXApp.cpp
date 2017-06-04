@@ -24,13 +24,18 @@ using websocketpp::lib::bind;
 static const TX_STRING InteractorId = "Interaction Monitor";
 
 // global variables
+server coord_server;
 static TX_HANDLE g_hGlobalInteractorSnapshot = TX_EMPTY_HANDLE;
-int lastX = 0;
-int lastY = 0;
+websocketpp::connection_hdl gHdl;
+bool broadcast = false;
 
-void on_message(server* s, websocketpp::connection_hdl hdl, server::message_ptr message) {
-	std::string msg = "{\"x\":" + std::to_string(lastX) + ",\"y\":" + std::to_string(lastY) + "}";
-	s->send(hdl, msg, websocketpp::frame::opcode::text);
+void on_open(server* s, websocketpp::connection_hdl hdl) {
+	gHdl = hdl;
+	broadcast = true;
+}
+
+void on_close(server* s, websocketpp::connection_hdl hdl) {
+	broadcast = false;
 }
 
 /*
@@ -113,9 +118,11 @@ void OnGazeDataEvent(TX_HANDLE hGazeDataBehavior)
 {
 	TX_GAZEPOINTDATAEVENTPARAMS eventParams;
 	if (txGetGazePointDataEventParams(hGazeDataBehavior, &eventParams) == TX_RESULT_OK) {
-		lastX = (int)eventParams.X;
-		lastY = (int)eventParams.Y;
-		printf("Gaze Data: (%.1f, %.1f) timestamp %.0f ms\n", eventParams.X, eventParams.Y, eventParams.Timestamp);
+		if (broadcast) {
+			std::string msg = "{\"x\":" + std::to_string((int)eventParams.X) + ",\"y\":" + std::to_string((int)eventParams.Y) + "}";
+			coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
+			printf("Gaze Data: (%.1f, %.1f)\n", eventParams.X, eventParams.Y);
+		}
 	}
 	else {
 		printf("Failed to interpret gaze data event packet.\n");
@@ -142,7 +149,6 @@ void TX_CALLCONVENTION HandleEvent(TX_CONSTHANDLE hAsyncData, TX_USERPARAM userP
 
 int main(int argc, char* argv[])
 {
-
 	TX_CONTEXTHANDLE hContext = TX_EMPTY_HANDLE;
 	TX_TICKET hConnectionStateChangedTicket = TX_INVALID_TICKET;
 	TX_TICKET hEventHandlerTicket = TX_INVALID_TICKET;
@@ -166,14 +172,11 @@ int main(int argc, char* argv[])
 	}
 
 	// Setup websocket server
-	server coord_server;
-
-	coord_server.set_message_handler(bind(&on_message, &coord_server, ::_1, ::_2));
-
+	coord_server.clear_access_channels(websocketpp::log::alevel::all);
+	coord_server.set_open_handler(bind(&on_open, &coord_server, ::_1));
 	coord_server.init_asio();
 	coord_server.listen(2366);
 	coord_server.start_accept();
-
 	coord_server.run();
 
 	printf("Press any key to exit...\n");
