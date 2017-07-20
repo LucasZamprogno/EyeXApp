@@ -4,6 +4,7 @@
 
 #include "stdafx.h"
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
@@ -36,6 +37,14 @@ void on_open(server* s, websocketpp::connection_hdl hdl) {
 
 void on_close(server* s, websocketpp::connection_hdl hdl) {
 	broadcast = false;
+}
+
+void on_message(server* s, websocketpp::connection_hdl, server::message_ptr msg) {
+	// No idea why a global didn't work
+	std::ofstream fileOut;
+	fileOut.open("out.txt", std::ios::app);
+	fileOut << msg->get_payload() << std::endl;
+	fileOut.close();
 }
 
 /*
@@ -121,7 +130,7 @@ void OnGazeDataEvent(TX_HANDLE hGazeDataBehavior)
 		if (broadcast) {
 			std::string msg = "{\"x\":" + std::to_string((int)eventParams.X) + ",\"y\":" + std::to_string((int)eventParams.Y) + "}";
 			coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
-			printf("Gaze Data: (%.1f, %.1f)\n", eventParams.X, eventParams.Y);
+			//printf("Gaze Data: (%.1f, %.1f)\n", eventParams.X, eventParams.Y);
 		}
 	}
 	else {
@@ -174,6 +183,7 @@ int main(int argc, char* argv[])
 	// Setup websocket server
 	coord_server.clear_access_channels(websocketpp::log::alevel::all);
 	coord_server.set_open_handler(bind(&on_open, &coord_server, ::_1));
+	coord_server.set_message_handler(bind(&on_message, &coord_server, ::_1, ::_2));
 	coord_server.init_asio();
 	coord_server.listen(2366);
 	coord_server.start_accept();
