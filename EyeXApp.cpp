@@ -29,8 +29,10 @@ server coord_server;
 static TX_HANDLE g_hGlobalInteractorSnapshot = TX_EMPTY_HANDLE;
 websocketpp::connection_hdl gHdl;
 bool broadcast = false;
+bool connectionConfirmed = false;
 
 void on_open(server* s, websocketpp::connection_hdl hdl) {
+	printf("Websocket connection established");
 	gHdl = hdl;
 	broadcast = true;
 }
@@ -96,9 +98,6 @@ void TX_CALLCONVENTION OnEngineConnectionStateChanged(TX_CONNECTIONSTATE connect
 		if (!success) {
 			printf("Failed to initialize the data stream.\n");
 		}
-		else {
-			printf("Waiting for gaze data to start streaming...\n");
-		}
 	}
 									   break;
 
@@ -130,7 +129,10 @@ void OnGazeDataEvent(TX_HANDLE hGazeDataBehavior)
 		if (broadcast) {
 			std::string msg = "{\"x\":" + std::to_string((int)eventParams.X) + ",\"y\":" + std::to_string((int)eventParams.Y) + "}";
 			coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
-			//printf("Gaze Data: (%.1f, %.1f)\n", eventParams.X, eventParams.Y);
+			if (!connectionConfirmed) {
+				printf("Data received from tracker");
+				connectionConfirmed = true;
+			}
 		}
 	}
 	else {
@@ -189,10 +191,7 @@ int main(int argc, char* argv[])
 	coord_server.start_accept();
 	coord_server.run();
 
-	printf("Press any key to exit...\n");
-	_getch();
-	printf("Exiting.\n");
-
+	// Technically since you have to hard exit because of the server this will never happen, keeping for reference
 	// disable and delete the context.
 	txDisableConnection(hContext);
 	txReleaseObject(&g_hGlobalInteractorSnapshot);
