@@ -32,7 +32,7 @@ bool broadcast = false;
 bool connectionConfirmed = false;
 
 void on_open(server* s, websocketpp::connection_hdl hdl) {
-	printf("Websocket connection established");
+	printf("Websocket connection established.\n");
 	gHdl = hdl;
 	broadcast = true;
 }
@@ -130,7 +130,7 @@ void OnGazeDataEvent(TX_HANDLE hGazeDataBehavior)
 			std::string msg = "{\"x\":" + std::to_string((int)eventParams.X) + ",\"y\":" + std::to_string((int)eventParams.Y) + "}";
 			coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
 			if (!connectionConfirmed) {
-				printf("Data received from tracker");
+				printf("Data received from tracker.\n");
 				connectionConfirmed = true;
 			}
 		}
