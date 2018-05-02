@@ -13,11 +13,13 @@
 #include <conio.h>
 #include <assert.h>
 #include <eyex/EyeX.h>
+#include "json.hpp"
 
 typedef websocketpp::server<websocketpp::config::asio> server;
 using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
+using json = nlohmann::json;
 
 #pragma comment (lib, "Tobii.EyeX.Client.lib")
 
@@ -42,9 +44,18 @@ void on_close(server* s, websocketpp::connection_hdl hdl) {
 }
 
 void on_message(server* s, websocketpp::connection_hdl, server::message_ptr msg) {
-	// No idea why a global didn't work
+	std::string outfile;
+	try {
+		auto j = json::parse(msg->get_payload());
+		std::string id = j["id"];
+		outfile = id + ".txt";
+	}
+	catch (const std::exception& ex) {
+		std::cerr << ex.what() << std::endl;
+		outfile = "out.txt";
+	}
 	std::ofstream fileOut;
-	fileOut.open("out.txt", std::ios::app);
+	fileOut.open(outfile, std::ios::app);
 	fileOut << msg->get_payload() << std::endl;
 	fileOut.close();
 }
