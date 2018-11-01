@@ -32,7 +32,7 @@ bool broadcast = false;
 bool connectionConfirmed = false;
 
 void on_open(server* s, websocketpp::connection_hdl hdl) {
-	printf("Websocket connection established");
+	printf("Websocket connection established\n");
 	gHdl = hdl;
 	broadcast = true;
 }
@@ -127,10 +127,11 @@ void OnGazeDataEvent(TX_HANDLE hGazeDataBehavior)
 	TX_GAZEPOINTDATAEVENTPARAMS eventParams;
 	if (txGetGazePointDataEventParams(hGazeDataBehavior, &eventParams) == TX_RESULT_OK) {
 		if (broadcast) {
-			std::string msg = "{\"x\":" + std::to_string((int)eventParams.X) + ",\"y\":" + std::to_string((int)eventParams.Y) + "}";
+			// std::string msg = "{\"x\":" + std::to_string((int)eventParams.X) + ",\"y\":" + std::to_string((int)eventParams.Y) + "}";
+			std::string msg = "gaze,1234567890," + std::to_string((int)eventParams.X) + "," + std::to_string((int)eventParams.Y);
 			coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
 			if (!connectionConfirmed) {
-				printf("Data received from tracker");
+				printf("Data received from tracker\n");
 				connectionConfirmed = true;
 			}
 		}
@@ -187,7 +188,7 @@ int main(int argc, char* argv[])
 	coord_server.set_open_handler(bind(&on_open, &coord_server, ::_1));
 	coord_server.set_message_handler(bind(&on_message, &coord_server, ::_1, ::_2));
 	coord_server.init_asio();
-	coord_server.listen(2366);
+	coord_server.listen(8008);
 	coord_server.start_accept();
 	coord_server.run();
 
