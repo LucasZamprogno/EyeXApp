@@ -13,6 +13,7 @@
 #include <conio.h>
 #include <assert.h>
 #include <eyex/EyeX.h>
+#include <chrono>
 
 typedef websocketpp::server<websocketpp::config::asio> server;
 using websocketpp::lib::placeholders::_1;
@@ -128,7 +129,9 @@ void OnGazeDataEvent(TX_HANDLE hGazeDataBehavior)
 	if (txGetGazePointDataEventParams(hGazeDataBehavior, &eventParams) == TX_RESULT_OK) {
 		if (broadcast) {
 			// std::string msg = "{\"x\":" + std::to_string((int)eventParams.X) + ",\"y\":" + std::to_string((int)eventParams.Y) + "}";
-			std::string msg = "gaze,1234567890," + std::to_string((int)eventParams.X) + "," + std::to_string((int)eventParams.Y);
+			// Following from https://stackoverflow.com/questions/19555121/how-to-get-current-timestamp-in-milliseconds-since-1970-just-the-way-java-gets
+			__int64 now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			std::string msg = "gaze," + std::to_string(now) + "," + std::to_string((int)eventParams.X) + "," + std::to_string((int)eventParams.Y);
 			coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
 			if (!connectionConfirmed) {
 				printf("Data received from tracker\n");
