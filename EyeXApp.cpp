@@ -13,13 +13,11 @@
 #include <conio.h>
 #include <assert.h>
 #include <eyex/EyeX.h>
-#include "json.hpp"
 
 typedef websocketpp::server<websocketpp::config::asio> server;
 using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
-using json = nlohmann::json;
 
 #pragma comment (lib, "Tobii.EyeX.Client.lib")
 
@@ -44,18 +42,9 @@ void on_close(server* s, websocketpp::connection_hdl hdl) {
 }
 
 void on_message(server* s, websocketpp::connection_hdl, server::message_ptr msg) {
-	std::string outfile;
-	try {
-		auto j = json::parse(msg->get_payload());
-		std::string id = j["id"];
-		outfile = id + ".txt";
-	}
-	catch (const std::exception& ex) {
-		std::cerr << ex.what() << std::endl;
-		outfile = "out.txt";
-	}
+	// No idea why a global didn't work
 	std::ofstream fileOut;
-	fileOut.open(outfile, std::ios::app);
+	fileOut.open("out.txt", std::ios::app);
 	fileOut << msg->get_payload() << std::endl;
 	fileOut.close();
 }
@@ -149,17 +138,19 @@ void OnFixationDataEvent(TX_HANDLE hFixationDataBehavior)
 		eventDescription = (eventType == TX_FIXATIONDATAEVENTTYPE_DATA) ? "Data"
 			: ((eventType == TX_FIXATIONDATAEVENTTYPE_END) ? "End"
 				: "Begin");
+		if (eventDescription == "Begin" || eventDescription == "End") {
+			printf("Fixation %s: (%.1f, %.1f) timestamp %.0f ms\n", eventDescription, eventParams.X, eventParams.Y, eventParams.Timestamp);
 
-		printf("Fixation %s: (%.1f, %.1f) timestamp %.0f ms\n", eventDescription, eventParams.X, eventParams.Y, eventParams.Timestamp);
+		}
 		/*
 		if (broadcast) {
-			__int64 now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-			std::string msg = "gaze," + std::to_string(now) + "," + std::to_string((int)eventParams.X) + "," + std::to_string((int)eventParams.Y);
-			coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
-			if (!connectionConfirmed) {
-				printf("Data received from tracker.\n");
-				connectionConfirmed = true;
-			}
+		__int64 now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		std::string msg = "gaze," + std::to_string(now) + "," + std::to_string((int)eventParams.X) + "," + std::to_string((int)eventParams.Y);
+		coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
+		if (!connectionConfirmed) {
+		printf("Data received from tracker.\n");
+		connectionConfirmed = true;
+		}
 		}
 		*/
 	}
