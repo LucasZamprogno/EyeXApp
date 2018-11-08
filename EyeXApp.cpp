@@ -61,12 +61,12 @@ void on_message(server* s, websocketpp::connection_hdl, server::message_ptr msg)
 }
 
 /*
-* Initializes g_hGlobalInteractorSnapshot with an interactor that has the Gaze Point behavior.
+* Initializes g_hGlobalInteractorSnapshot with an interactor that has the Fixation Data behavior.
 */
 BOOL InitializeGlobalInteractorSnapshot(TX_CONTEXTHANDLE hContext)
 {
 	TX_HANDLE hInteractor = TX_EMPTY_HANDLE;
-	TX_GAZEPOINTDATAPARAMS params = { TX_GAZEPOINTDATAMODE_LIGHTLYFILTERED };
+	TX_FIXATIONDATAPARAMS params = { TX_FIXATIONDATAMODE_SLOW };
 	BOOL success;
 
 	success = txCreateGlobalInteractorSnapshot(
@@ -74,7 +74,7 @@ BOOL InitializeGlobalInteractorSnapshot(TX_CONTEXTHANDLE hContext)
 		InteractorId,
 		&g_hGlobalInteractorSnapshot,
 		&hInteractor) == TX_RESULT_OK;
-	success &= txCreateGazePointDataBehavior(hInteractor, &params) == TX_RESULT_OK;
+	success &= txCreateFixationDataBehavior(hInteractor, &params) == TX_RESULT_OK;
 
 	txReleaseObject(&hInteractor);
 
@@ -109,6 +109,10 @@ void TX_CALLCONVENTION OnEngineConnectionStateChanged(TX_CONNECTIONSTATE connect
 		if (!success) {
 			printf("Failed to initialize the data stream.\n");
 		}
+		else
+		{
+			printf("Waiting for fixation data to start streaming...\n");
+		}
 	}
 									   break;
 
@@ -131,23 +135,36 @@ void TX_CALLCONVENTION OnEngineConnectionStateChanged(TX_CONNECTIONSTATE connect
 }
 
 /*
-* Handles an event from the Gaze Point data stream.
+* Handles an event from the fixation data stream.
 */
-void OnGazeDataEvent(TX_HANDLE hGazeDataBehavior)
+void OnFixationDataEvent(TX_HANDLE hFixationDataBehavior)
 {
-	TX_GAZEPOINTDATAEVENTPARAMS eventParams;
-	if (txGetGazePointDataEventParams(hGazeDataBehavior, &eventParams) == TX_RESULT_OK) {
+	TX_FIXATIONDATAEVENTPARAMS eventParams;
+	TX_FIXATIONDATAEVENTTYPE eventType;
+	char* eventDescription;
+
+	if (txGetFixationDataEventParams(hFixationDataBehavior, &eventParams) == TX_RESULT_OK) {
+		eventType = eventParams.EventType;
+
+		eventDescription = (eventType == TX_FIXATIONDATAEVENTTYPE_DATA) ? "Data"
+			: ((eventType == TX_FIXATIONDATAEVENTTYPE_END) ? "End"
+				: "Begin");
+
+		printf("Fixation %s: (%.1f, %.1f) timestamp %.0f ms\n", eventDescription, eventParams.X, eventParams.Y, eventParams.Timestamp);
+		/*
 		if (broadcast) {
-			std::string msg = "{\"x\":" + std::to_string((int)eventParams.X) + ",\"y\":" + std::to_string((int)eventParams.Y) + "}";
+			__int64 now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			std::string msg = "gaze," + std::to_string(now) + "," + std::to_string((int)eventParams.X) + "," + std::to_string((int)eventParams.Y);
 			coord_server.send(gHdl, msg, websocketpp::frame::opcode::text);
 			if (!connectionConfirmed) {
 				printf("Data received from tracker.\n");
 				connectionConfirmed = true;
 			}
 		}
+		*/
 	}
 	else {
-		printf("Failed to interpret gaze data event packet.\n");
+		printf("Failed to interpret fixation data event packet.\n");
 	}
 }
 
@@ -161,14 +178,24 @@ void TX_CALLCONVENTION HandleEvent(TX_CONSTHANDLE hAsyncData, TX_USERPARAM userP
 
 	txGetAsyncDataContent(hAsyncData, &hEvent);
 
-	if (txGetEventBehavior(hEvent, &hBehavior, TX_BEHAVIORTYPE_GAZEPOINTDATA) == TX_RESULT_OK) {
-		OnGazeDataEvent(hBehavior);
+	// NOTE. Uncomment the following line of code to view the event object. The same function can be used with any interaction object.
+	//OutputDebugStringA(txDebugObject(hEvent));
+
+	if (txGetEventBehavior(hEvent, &hBehavior, TX_BEHAVIORTYPE_FIXATIONDATA) == TX_RESULT_OK) {
+		OnFixationDataEvent(hBehavior);
 		txReleaseObject(&hBehavior);
 	}
+
+	// NOTE since this is a very simple application with a single interactor and a single data stream, 
+	// our event handling code can be very simple too. A more complex application would typically have to 
+	// check for multiple behaviors and route events based on interactor IDs.
 
 	txReleaseObject(&hEvent);
 }
 
+/*
+* Application entry point.
+*/
 int main(int argc, char* argv[])
 {
 	TX_CONTEXTHANDLE hContext = TX_EMPTY_HANDLE;
@@ -184,8 +211,7 @@ int main(int argc, char* argv[])
 	success &= txRegisterEventHandler(hContext, &hEventHandlerTicket, HandleEvent, NULL) == TX_RESULT_OK;
 	success &= txEnableConnection(hContext) == TX_RESULT_OK;
 
-	// Let the events flow until a key is pressed.
-	// May want to make this a more specific exit condition
+	// let the events flow until a key is pressed.
 	if (success) {
 		printf("Initialization was successful.\n");
 	}
@@ -198,7 +224,7 @@ int main(int argc, char* argv[])
 	coord_server.set_open_handler(bind(&on_open, &coord_server, ::_1));
 	coord_server.set_message_handler(bind(&on_message, &coord_server, ::_1, ::_2));
 	coord_server.init_asio();
-	coord_server.listen(2366);
+	coord_server.listen(8008);
 	coord_server.start_accept();
 	coord_server.run();
 
@@ -212,5 +238,6 @@ int main(int argc, char* argv[])
 	if (!success) {
 		printf("EyeX could not be shut down cleanly. Did you remember to release all handles?\n");
 	}
+
 	return 0;
 }
